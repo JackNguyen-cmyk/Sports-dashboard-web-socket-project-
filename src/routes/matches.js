@@ -1,13 +1,28 @@
 import {Router} from 'express';
-import { createMatchSchema } from '../validation/matches.js';
+import { desc } from 'drizzle-orm';
+import { createMatchSchema, listMatchesQuerySchema } from '../validation/matches.js';
 import { db } from '../db/db.js';
 import {matches} from '../db/schema.js';
 import { getMatchStatus } from '../utils/match-status.js';
 
 export const matchRouter = Router();
 
-matchRouter.get('/', (req, res) => {
-  res.status(200).json({ message: 'Hello from the match router!' });
+const MAX_LIMIT = 100;
+
+matchRouter.get('/', async (req, res) => {
+  const parsed = listMatchesQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid query parameters", details: JSON.stringify(parsed.error) });
+  }
+
+  const limit = Math.min(parsed.data.limit ?? 50, MAX_LIMIT);
+  
+  try{
+    const data = await db.select().from(matches).limit(limit).orderBy(desc(matches.createdAt));
+    res.status(200).json({ matches: data });  
+  }catch (error) {
+    return res.status(500).json({ error: "Failed to retrieve matches", details: JSON.stringify(error.message) });
+  }
 });
 
 matchRouter.post('/', async (req, res) => {
