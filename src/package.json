@@ -8,7 +8,8 @@
     "dev": "node --watch index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:crud": "node crud.js"
+    "db:crud": "node crud.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
