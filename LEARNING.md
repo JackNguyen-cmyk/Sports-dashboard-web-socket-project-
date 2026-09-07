@@ -74,6 +74,19 @@ column has `NOT NULL DEFAULT 0` raises Postgres `23502`. Omitting the key
 entirely lets the database apply its default — one source of truth instead of
 two.
 
+**Drizzle wraps driver errors.** A Postgres constraint violation arrives as a
+`DrizzleQueryError` whose `code` is `undefined`; the SQLSTATE is on
+`error.cause.code`. Checking `error.code` silently fell through to a blanket
+500, so a duplicate sequence and a missing match both looked like server
+faults instead of 409 and 404. When branching on an error, print its actual
+shape first rather than assuming the driver's.
+
+**Constraint violations are usually client errors, not server errors.**
+`23503` foreign_key_violation means the referenced row does not exist — 404.
+`23505` unique_violation means the caller asked for a slot already taken —
+409. Returning 500 for either tells the client to retry something that will
+never succeed.
+
 **Sequences never reuse numbers.** `nextval()` is consumed before constraints
 are checked and does not roll back, so failed inserts and rolled-back
 transactions leave permanent gaps. IDs are identifiers, not counters.
