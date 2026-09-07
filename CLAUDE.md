@@ -57,11 +57,25 @@ can just be made directly.
 
 ### Learning log
 
-Mistakes I make and anything with teaching value go in `LEARNING.md`, not here
-— append to it as they come up, grouped by the concept they illustrate rather
-than in the order they happened. Record the actual bug, why it broke, and the
-general lesson. Keep `CLAUDE.md` for instructions and open work; `LEARNING.md`
-is the record of what went wrong and what it taught.
+Mistakes I make, questions I ask, and anything with teaching value go in
+`LEARNING.md`, not here. Keep `CLAUDE.md` for instructions and open work;
+`LEARNING.md` is the record of what went wrong and what it taught.
+
+It has two halves, and most findings belong in the first:
+
+- **Lessons**, grouped by the concept they illustrate rather than
+  chronologically: the actual bug, why it broke, the general rule.
+- **Debugging stories**, for anything that took real diagnosis, written as
+  symptom → investigation → root cause → fix → evidence.
+
+I want to be able to talk about this project in interviews — "what went wrong
+and how did you find it" is the usual question, and specifics are what make an
+answer credible. So keep the concrete details: the actual error text or
+SQLSTATE, the wrong assumption that caused it, how it was isolated, and a
+number where one exists (49 requests allowed versus 25, 5 of 18 tests failing
+against the old code). Write down *how* it was diagnosed, not just the
+conclusion — the reasoning is the part worth retelling. A finding with no
+number and no method is not worth much.
 
 ## Git
 

@@ -168,3 +168,120 @@ about to commit the whole of root `node_modules/`.
 **Branches are labels; commits outlive them.** Work drifted onto one
 long-lived branch while `main` sat four commits behind holding a stale tree —
 leaving no current baseline to branch from.
+
+---
+
+# Debugging stories
+
+Longer write-ups of the bugs that took real diagnosis. Kept in symptom →
+investigation → root cause → fix → evidence order, because that is the order
+someone will ask about them.
+
+## Every match was marked "finished" before kickoff
+
+**Symptom.** `getMatchStatus` returned `finished` for matches that had not
+started. Only for some matches, which made it look intermittent.
+
+**Investigation.** The function already guarded against unparseable dates with
+`Number.isNaN(end.getTime())`, so an invalid `endTime` seemed covered. Testing
+the function directly with the two nullish values separated the cases:
+`endTime: undefined` returned `null`, but `endTime: null` returned `finished`.
+
+**Root cause.** `new Date(null)` is not an invalid date — it is the Unix epoch,
+`1970-01-01`. The NaN guard therefore passed, and the `now >= end` comparison
+was true for every match. Since `end_time` is nullable and Drizzle returns
+`null` for a match that has not concluded, every unfinished match qualified.
+Worse, `syncMatchStatus` would then persist `finished` to the database.
+
+**Fix.** Handle the absent end time *before* parsing it, rather than relying on
+a parse guard to catch it. Return `scheduled` before kickoff, `live` after.
+
+**Evidence.** Wrote 18 tests, then re-ran them against the old implementation:
+5 failed. A test suite that cannot fail against the bug it describes has not
+proven anything.
+
+## HTTP worked perfectly and WebSockets silently did not
+
+**Symptom.** Every REST route returned 200. WebSocket clients could not connect
+at all — no error, no log, just a connection that never opened.
+
+**Investigation.** The WebSocket server was constructed and attached without
+throwing, so the failure was not in `ws`. Working backwards from what the two
+protocols share: both are supposed to run on the same HTTP server.
+
+**Root cause.** `index.js` created `const server = http.createServer(app)`,
+attached the WebSocket server to `server`, and then called `app.listen()`.
+`app.listen()` quietly creates a *second* HTTP server. The one holding the
+WebSocket upgrade handler was never listening, so upgrade requests never
+reached it.
+
+**Fix.** `server.listen()`.
+
+**Evidence.** After the change the same client received `{"type":"welcome"}` on
+`ws://localhost:8000/ws` while `GET /` still returned 200 — both on one port.
+
+## The rate limit was silently half what it claimed
+
+**Symptom.** None visible. Requests were rejected "a bit early", easy to
+dismiss as the limiter being approximate.
+
+**Investigation.** Rather than read the code, measured it: 60 rapid requests to
+two different routes. `/` allowed 49; `/matches` allowed 25. A limiter does not
+apply two different limits to one window, so the difference had to be
+structural — and it lined up exactly with where each route sat in the
+middleware chain.
+
+**Root cause.** Arcjet was registered twice — an inline middleware plus a
+refactored `securityMiddleware()`. Routes registered after both called
+`protect()` twice per request, consuming the quota twice and doubling the calls
+billed. Routes registered between them called it once.
+
+**Fix.** Delete the inline copy and register the survivor above every route,
+since Express matches in registration order and `GET /` had been declared
+before it.
+
+**Evidence.** `/matches` went from 25 back to the full window; `/` went from 60
+unlimited to 50 allowed and 10 denied, confirming it was covered rather than
+skipped.
+
+## Constraint violations all looked like server errors
+
+**Symptom.** `POST /matches/:id/commentary` returned 500 both for a duplicate
+sequence and for a nonexistent match, despite explicit handling for Postgres
+`23505` and `23503`.
+
+**Investigation.** The handling looked correct, so the assumption underneath it
+was the suspect: that `error.code` holds the SQLSTATE. Printed the error's
+actual shape instead of guessing — constructor, `code`, and `cause`.
+
+**Root cause.** Drizzle wraps driver errors in a `DrizzleQueryError` whose own
+`code` is `undefined`. The Postgres error is on `error.cause`.
+
+**Fix.** Read `error?.cause?.code ?? error?.code`, keeping the fallback in case
+an unwrapped error ever arrives.
+
+**Evidence.** Duplicate sequence returns 409 and a missing match returns 404 —
+both client errors. A 500 tells the caller to retry something that can never
+succeed.
+
+## "minute": null was stored as minute 0
+
+**Symptom.** None at request time — the API returned 201. The row simply held
+`0` where the client had sent `null`.
+
+**Investigation.** Probed the schema with the values a client might realistically
+send for "unknown": `null`, `true`, `[]`, `""`. All four were accepted, and all
+four produced `0` or `1`.
+
+**Root cause.** `z.coerce.number()` is `Number()` underneath, and `Number(null)`
+is `0`. Coercion was inherited from the query-parameter schemas, where it is
+correct because every value genuinely arrives as a string. In a JSON body the
+numbers are already numbers.
+
+**Fix.** Plain `z.number()` for body fields; coercion kept for query and path
+params. Also bounded every integer to `2147483647`, since Postgres `integer` is
+4 bytes and oversized values were passing validation only to fail at insert
+with `22003` — another 500 for what was plainly a bad request.
+
+**Evidence.** `null` now returns 400 naming the field, and the three inputs that
+previously produced 500s return 400 instead.
