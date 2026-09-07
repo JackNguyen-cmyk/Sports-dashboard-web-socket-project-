@@ -1,8 +1,9 @@
 import { Router } from 'express';
+import { desc, eq } from 'drizzle-orm';
 
 import { db } from '../db/db.js';
 import { commentary } from '../db/schema.js';
-import { createCommentarySchema } from '../validation/commentary.js';
+import { createCommentarySchema, listCommentaryQuerySchema } from '../validation/commentary.js';
 import { matchIdParamSchema } from '../validation/matches.js';
 
 // mergeParams lets this router see :id from the path it is mounted under
@@ -10,27 +11,58 @@ import { matchIdParamSchema } from '../validation/matches.js';
 // child router only sees the segment it was mounted with.
 export const commentaryRouter = Router({ mergeParams: true });
 
-commentaryRouter.post('/', async (req, res) => {
-  const parsedParams = matchIdParamSchema.safeParse(req.params);
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 100;
+
+// Shared by both handlers: the path segment is the only source of the match id.
+const parseMatchId = (req) => matchIdParamSchema.safeParse(req.params);
+
+const zodDetails = (error) =>
+  error.issues.map((i) => ({ field: i.path.join('.'), message: i.message }));
+
+commentaryRouter.get('/', async (req, res) => {
+  const parsedParams = parseMatchId(req);
   if (!parsedParams.success) {
-    return res.status(400).json({
-      error: 'invalid match id',
-      details: parsedParams.error.issues.map((i) => ({
-        field: i.path.join('.'),
-        message: i.message,
-      })),
-    });
+    return res.status(400).json({ error: 'invalid match id', details: zodDetails(parsedParams.error) });
+  }
+
+  const parsedQuery = listCommentaryQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    return res.status(400).json({ error: 'invalid query parameters', details: zodDetails(parsedQuery.error) });
+  }
+
+  const limit = Math.min(parsedQuery.data.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+
+  try {
+    const entries = await db
+      .select()
+      .from(commentary)
+      .where(eq(commentary.matchId, parsedParams.data.id))
+      // createdAt alone is not a total order - two events inserted in the same
+      // millisecond would come back in whatever order the planner chose, and
+      // the page could differ between identical requests. sequence is unique
+      // per match, so it breaks every tie deterministically.
+      .orderBy(desc(commentary.createdAt), desc(commentary.sequence))
+      .limit(limit);
+
+    return res.status(200).json({ commentary: entries });
+  } catch (error) {
+    // Logged rather than returned: a Postgres error exposes table, column and
+    // constraint names.
+    console.error('failed to fetch commentary', error);
+    return res.status(500).json({ error: 'Failed to retrieve commentary' });
+  }
+});
+
+commentaryRouter.post('/', async (req, res) => {
+  const parsedParams = parseMatchId(req);
+  if (!parsedParams.success) {
+    return res.status(400).json({ error: 'invalid match id', details: zodDetails(parsedParams.error) });
   }
 
   const parsedBody = createCommentarySchema.safeParse(req.body);
   if (!parsedBody.success) {
-    return res.status(400).json({
-      error: 'invalid payload',
-      details: parsedBody.error.issues.map((i) => ({
-        field: i.path.join('.'),
-        message: i.message,
-      })),
-    });
+    return res.status(400).json({ error: 'invalid payload', details: zodDetails(parsedBody.error) });
   }
 
   try {
