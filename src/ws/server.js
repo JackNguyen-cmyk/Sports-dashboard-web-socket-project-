@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws';
+import { wsArcjet } from './arcjet.js';
 
 function sendJson(socket, payload) {
     if (socket.readyState !== WebSocket.OPEN) return;
@@ -24,7 +25,33 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS } = {}) {
     const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 1024 });
 
-    wss.on('connection', (socket) => {
+    wss.on('connection', async (socket, req) => {
+        // Checked before any heartbeat state or welcome frame, so a rejected
+        // connection is never treated as a live client.
+        if (wsArcjet) {
+            try {
+                const decision = await wsArcjet.protect(req);
+
+                if (decision.isDenied()) {
+                    // 1013 Try Again Later vs 1008 Policy Violation: standard
+                    // close codes, so a client can tell "retry later" apart
+                    // from "never going to work".
+                    const code = decision.reason.isRateLimit() ? 1013 : 1008;
+                    const reason = decision.reason.isRateLimit() ? 'Rate limit exceeded' : 'Access denied';
+
+                    socket.close(code, reason);
+                    return;
+                }
+            } catch (e) {
+                // Fails CLOSED, unlike the HTTP middleware which fails open:
+                // an unvetted socket can persist for hours, so refuse rather
+                // than admit a connection we could not evaluate.
+                console.error('WS connection error', e);
+                socket.close(1011, 'Server security error');
+                return;
+            }
+        }
+
         // Assume alive on connect; each pong re-arms it for the next sweep.
         socket.isAlive = true;
         socket.on('pong', () => { socket.isAlive = true; });
