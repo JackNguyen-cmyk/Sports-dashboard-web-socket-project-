@@ -35,11 +35,17 @@ export const listMatchesQuerySchema = z.object({
     .optional(),
 });
 
+// Postgres `integer` is 4 bytes; without this bound an oversized id passes
+// validation and the query fails with 22003, surfacing as a 500 for what is
+// really a bad request. No match can have an id above this anyway.
+const PG_INT4_MAX = 2_147_483_647;
+
 export const matchIdParamSchema = z.object({
   id: z.coerce
     .number({ message: 'id must be a number' })
     .int({ message: 'id must be an integer' })
-    .positive({ message: 'id must be greater than 0' }),
+    .positive({ message: 'id must be greater than 0' })
+    .max(PG_INT4_MAX, { message: 'id is too large' }),
 });
 
 const nonEmptyString = (label) =>

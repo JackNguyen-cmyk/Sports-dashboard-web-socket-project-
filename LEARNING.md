@@ -97,6 +97,20 @@ transactions leave permanent gaps. IDs are identifiers, not counters.
 raises `ReferenceError: error is not defined`, turning a handled failure into an
 unhandled one. Write `catch (error)`.
 
+**`z.coerce.number()` is `Number()`, which is far more permissive than it
+looks.** `Number(null)` is `0`, `Number(true)` is `1`, `Number([])` is `0`,
+`Number('')` is `0`. So a coerced schema accepted `"minute": null` and silently
+stored `0` — an event at kickoff, not an unknown minute. Coercion earns its
+place for query and path params, where every value genuinely arrives as a
+string. In a JSON body the numbers are already numbers, so coercion buys
+nothing and loses the distinction between absent and zero.
+
+**Validate against the column's range, not just its type.** Postgres `integer`
+is 4 bytes, but `z.number().int()` has no upper bound, so oversized values
+passed validation and failed at insert with `22003` — a 500 for what was
+plainly a bad request. The schema should refuse anything the column cannot
+hold.
+
 **`JSON.stringify(new Error(...))` returns `{}`.** `message` and `stack` are not
 enumerable, so error details vanish. Use `error.message`.
 
