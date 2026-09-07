@@ -51,7 +51,17 @@ matchRouter.post('/', async (req, res) => {
       awayScore: parsed.data.awayScore ?? 0,
       status
     }).returning();
+
     res.status(201).json({ message: "Match created successfully", match: event });
+
+    // Broadcast after responding, and outside the insert's try/catch: the row
+    // is already committed, so a notification failure must not turn a
+    // successful create into a 500.
+    try {
+      res.app.locals.broadcastMatchCreated?.(event);
+    } catch (broadcastError) {
+      console.error('broadcastMatchCreated failed', broadcastError);
+    }
   }
   catch (error) {
     return res.status(500).json({ error: "Failed to create match", details: JSON.stringify(error.message) });
