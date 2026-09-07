@@ -49,3 +49,33 @@ export const wsArcjet = arcjetKey
       ],
     })
   : null;
+
+export function securityMiddleware(){
+    return async (req, res, next) => {
+        if (!httpArcjet) return next();
+
+        try{
+            const decision = await httpArcjet.protect( req);
+
+            if (decision.isDenied()) {
+                if (decision.reason.isRateLimit()) {
+                    return res.status(429).json({ error: "Too many requests" });
+                }
+                if (decision.reason.isBot()) {
+                    return res.status(403).json({ error: "Automated traffic is not allowed" });
+                }
+                return res.status(403).json({ error: "Forbidden" });
+            }
+
+        } catch (error) {
+            // Fails OPEN, unlike the WebSocket path which fails closed. An
+            // HTTP request that slips through is over in milliseconds, so an
+            // outage at Arcjet should not take the whole API down with it.
+            // Flip to a 503 here if rejecting unvetted traffic matters more
+            // than staying up.
+            console.error("arcjet middleware failed, allowing request", error);
+        }
+
+        next();
+    };
+}

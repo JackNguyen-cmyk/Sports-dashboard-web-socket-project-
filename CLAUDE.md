@@ -55,6 +55,14 @@ Don't slow down every single response with a lecture — use judgment on depth
 based on how novel or risky the change is. Routine, well-understood changes
 can just be made directly.
 
+### Learning log
+
+Mistakes I make and anything with teaching value go in `LEARNING.md`, not here
+— append to it as they come up, grouped by the concept they illustrate rather
+than in the order they happened. Record the actual bug, why it broke, and the
+general lesson. Keep `CLAUDE.md` for instructions and open work; `LEARNING.md`
+is the record of what went wrong and what it taught.
+
 ## Git
 
 Work and commit directly on `main`; no feature branches unless I ask. Claude
