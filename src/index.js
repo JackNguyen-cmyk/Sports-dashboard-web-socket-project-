@@ -1,3 +1,11 @@
+// dotenv first: the agent is configured from APMINSIGHT_* environment
+// variables, and index.js does not otherwise import dotenv - it only worked
+// because db/db.js happened to pull it in first. That is a hidden dependency
+// on import order, so load it explicitly.
+import 'dotenv/config';
+
+// Then the agent, before express/pg/ws, since it instruments modules as they
+// are imported.
 import AgentAPI from "apminsight";
 AgentAPI.config();
 import express from "express";
