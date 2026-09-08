@@ -178,6 +178,39 @@ test (the 47–226ms round trip stays, and it still bills), and the right tool f
 measuring what that layer costs you. "Disabled" and "not enforcing" are
 different states.
 
+## Measuring
+
+**Measure the thing before optimising it, because the bottleneck is usually not
+where the plan assumed.** The Phase 1 baseline was taken to justify Redis
+pub/sub. At 500 concurrent WebSocket connections and 10 publishes/s, end-to-end
+POST-to-frame latency was p50 38ms — of which **~33ms was the Neon INSERT and
+5.2ms was the fan-out loop** (1.3ms at 50 connections, 2.8ms at 200). Redis
+cannot make an INSERT faster, so it will not move the headline number. That does
+not make Phase 2 wrong; it makes it a *correctness* change — with two instances,
+a POST landing on instance A must reach subscribers on instance B, and
+`matchSubscribers` is per-process. Knowing which of those it is beforehand is
+the difference between a claim and a measurement.
+
+**Split a latency number into the parts different fixes can move.** Reporting
+only end-to-end would have hidden the fan-out cost behind a constant database
+write. The route responds *before* it broadcasts, so recording the HTTP request
+on its own (`post_duration`) and subtracting gives the fan-out share. A single
+aggregate number is not actionable; a decomposed one tells you which change
+would help.
+
+**Percentiles need to be tagged by load level or they describe nothing.** A p99
+across a run that ramps 50 → 200 → 500 blends three regimes. Tagged per plateau,
+the tail was visibly the part that degraded — p99 67ms → 155ms → 220ms while p50
+barely moved from 33ms to 38ms. The median hid the only thing that was changing.
+
+**A rate limiter in front of the system is part of the measurement, so price it
+separately.** Same load with Arcjet back in the path (DRY_RUN — evaluating, not
+blocking) moved POST p50 from ~33ms to ~93ms: a flat **~60ms per request**,
+independent of connection count, roughly tripling the latency. Server CPU went
+from 13.7s to 116.6s for the same work. Worth knowing which share of a latency
+budget belongs to a third party rather than to your own code.
+
+
 ## Design lessons
 
 **A cross-file invariant is invisible at the call site.** `getMatchStatus` could
@@ -381,3 +414,44 @@ the decision lands.
 commentary POST reaches that subscriber and no one else. The general shape is
 worth remembering: **an `async` event handler leaves a window in which the
 listeners it registers do not exist yet.**
+
+## A load test that reported 253,225 iterations for 3,300 requests
+
+**Symptom.** The Arcjet comparison run, configured for 4m40s, took 8m04s of wall
+clock. k6's own progress line disagreed with itself: `running (7m33.5s)` while
+the scenario read `4m09.4s/4m40.0s`. Both runs reported implausible iteration
+counts — 182,349 and 253,225 — against roughly 3,300 actual requests (2,800
+publishes plus 500 held sockets).
+
+**Investigation.** The iteration count was the thread worth pulling: an
+iteration count two orders of magnitude too high means iterations that do
+nothing. `iteration_duration` confirmed it — median **16.25µs**, which is not a
+network round trip, it is a function returning immediately.
+
+That pointed at a guard added earlier in the same session. Subscriber VUs hold
+one socket for the rest of the run, so a VU recycled near the end would open a
+socket it had to close immediately; the guard skipped that with an early
+`return`. But `ramping-vus` starts a new iteration the instant one ends, so
+"return immediately" is a hot loop, not a no-op. It fires when
+`remainingMs < 5000`, and 500 VUs spun for the final seconds.
+
+**Why it mattered, and why it did not.** The guard window (test time > 275s)
+starts *after* the last plateau ends (270s), so the recorded p50/p95/p99 for
+every plateau are unaffected in both runs — worth establishing before deciding
+whether to re-run. What it did do was burn CPU competing with the server, and in
+the Arcjet run it ran for 209 seconds instead of 5, because a POST hung on a
+Neon `read ETIMEDOUT` (`http_req_duration` max **3m42s**, 4 occurrences) and k6
+waits for in-flight iterations before finishing.
+
+**Fix, and the second bug inside the fix.** Replacing `return` with
+`sleep(remainingMs / 1000)` did not work: 14,963 iterations in the last 0.3s.
+Once the run is past its nominal end `remainingMs` is *negative*, and the
+`Math.max(remainingMs, 0)` clamp turned that into `sleep(0)` — which returns
+immediately and spins exactly as before. A guard that can be handed a negative
+duration needs a non-zero floor, not a zero one:
+`sleep(Math.max(remainingMs / 1000, 1))`.
+
+**Evidence.** Same smoke configuration (5 connections, 2 publishes/s, 18s):
+14,963 iterations before, **40** after — 36 publishes plus 5 held sockets, which
+is exactly right. `ws_connected` also dropped from 7 to 5, matching the VU count
+one-for-one.

@@ -1,0 +1,73 @@
+
+[APM] Apminsight agent is disabled.
+✦Aj WARN Arcjet will use 127.0.0.1 when missing public IP address in development mode
+✦Aj WARN Arcjet will use 127.0.0.1 when missing public IP address in development mode
+
+[APM] Apminsight agent is disabled.
+Server is running on http://localhost:8000
+WebSocket server is running on ws://localhost:8000/ws
+(node:88614) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed to create commentary DrizzleQueryError: Failed query: insert into "commentary" ("id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at") values (default, $1, $2, $3, $4, $5, default, default, $6, $7, default, default) returning "id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at"
+params: 27,114,300114,1H,loadtest,load-test commentary seq=300114,{"postedAt":1788888303115}
+    at NodePgPreparedQuery.queryWithCache (file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/pg-core/session.js:41:15)
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+    at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:117:22
+    at async [90mfile:///Users/jacknguyen/Personal%20projects/Websocket%20project/.claude/worktrees/phase1-k6-baseline/src/[39mroutes/commentary.js:70:21 {
+  query: [32m'insert into "commentary" ("id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at") values (default, $1, $2, $3, $4, $5, default, default, $6, $7, default, default) returning "id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at"'[39m,
+  params: [
+    [33m27[39m,
+    [33m114[39m,
+    [33m300114[39m,
+    [32m'1H'[39m,
+    [32m'loadtest'[39m,
+    [32m'load-test commentary seq=300114'[39m,
+    [32m'{"postedAt":1788888303115}'[39m
+  ],
+  cause: Error: read ETIMEDOUT
+      at /Users/jacknguyen/Personal projects/Websocket project/src/node_modules/[4mpg-pool[24m/index.js:45:11
+  [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+      at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:124:18
+      at async NodePgPreparedQuery.queryWithCache (file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/pg-core/session.js:39:16)
+      at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:117:22
+      at async [90mfile:///Users/jacknguyen/Personal%20projects/Websocket%20project/.claude/worktrees/phase1-k6-baseline/src/[39mroutes/commentary.js:70:21 {
+    errno: [33m-60[39m,
+    code: [32m'ETIMEDOUT'[39m,
+    syscall: [32m'read'[39m
+  }
+}
+failed to create commentary DrizzleQueryError: Failed query: insert into "commentary" ("id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at") values (default, $1, $2, $3, $4, $5, default, default, $6, $7, default, default) returning "id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at"
+params: 27,114,1200114,1H,loadtest,load-test commentary seq=1200114,{"postedAt":1788888303215}
+    at NodePgPreparedQuery.queryWithCache (file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/pg-core/session.js:41:15)
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+    at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:117:22
+    at async [90mfile:///Users/jacknguyen/Personal%20projects/Websocket%20project/.claude/worktrees/phase1-k6-baseline/src/[39mroutes/commentary.js:70:21 {
+  query: [32m'insert into "commentary" ("id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at") values (default, $1, $2, $3, $4, $5, default, default, $6, $7, default, default) returning "id", "match_id", "minute", "sequence", "period", "event_type", "actor", "team", "message", "metadata", "tags", "created_at"'[39m,
+  params: [
+    [33m27[39m,
+    [33m114[39m,
+    [33m1200114[39m,
+    [32m'1H'[39m,
+    [32m'loadtest'[39m,
+    [32m'load-test commentary seq=1200114'[39m,
+    [32m'{"postedAt":1788888303215}'[39m
+  ],
+  cause: Error: read ETIMEDOUT
+      at /Users/jacknguyen/Personal projects/Websocket project/src/node_modules/[4mpg-pool[24m/index.js:45:11
+  [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+      at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:124:18
+      at async NodePgPreparedQuery.queryWithCache (file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/pg-core/session.js:39:16)
+      at async file:///Users/jacknguyen/Personal%20projects/Websocket%20project/src/node_modules/[4mdrizzle-orm[24m/node-postgres/session.js:117:22
+      at async [90mfile:///Users/jacknguyen/Personal%20projects/Websocket%20project/.claude/worktrees/phase1-k6-baseline/src/[39mroutes/commentary.js:70:21 {
+    errno: [33m-60[39m,
+    code: [32m'ETIMEDOUT'[39m,
+    syscall: [32m'read'[39m
+  }
+}
