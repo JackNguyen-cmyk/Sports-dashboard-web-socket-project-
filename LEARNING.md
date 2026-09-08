@@ -122,6 +122,13 @@ place for query and path params, where every value genuinely arrives as a
 string. In a JSON body the numbers are already numbers, so coercion buys
 nothing and loses the distinction between absent and zero.
 
+**Fixing a bug in one file does not fix the pattern.** The `z.coerce` problem
+was found and fixed in the commentary schema, but the identical bug sat
+untouched in the match schema for another two days — `"homeScore": null` still
+became `0`, `true` still became `1`. Nothing pointed from one to the other. When
+a bug turns out to be a *class* of bug rather than a one-off, grep for the
+pattern across the codebase before closing it out.
+
 **Validate against the column's range, not just its type.** Postgres `integer`
 is 4 bytes, but `z.number().int()` has no upper bound, so oversized values
 passed validation and failed at insert with `22003` — a 500 for what was

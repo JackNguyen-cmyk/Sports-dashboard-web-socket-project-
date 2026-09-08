@@ -54,11 +54,17 @@ const nonEmptyString = (label) =>
     .trim()
     .min(1, { message: `${label} must not be empty` });
 
+// Deliberately NOT z.coerce. Coercion is Number() underneath, so a coerced
+// score turned null into 0, true into 1 and [] into 0 - "score unknown" became
+// a real 0-0 scoreline with no error raised anywhere. These are body fields and
+// a JSON body already carries real numbers; the path and query schemas above
+// still coerce, because there every value genuinely arrives as a string.
 const nonNegativeInt = (label) =>
-  z.coerce
+  z
     .number({ message: `${label} must be a number` })
     .int({ message: `${label} must be an integer` })
-    .nonnegative({ message: `${label} must not be negative` });
+    .nonnegative({ message: `${label} must not be negative` })
+    .max(PG_INT4_MAX, { message: `${label} is too large` });
 
 export const createMatchSchema = z
   .object({
