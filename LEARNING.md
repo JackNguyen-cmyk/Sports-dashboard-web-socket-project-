@@ -93,6 +93,23 @@ transactions leave permanent gaps. IDs are identifiers, not counters.
 
 ## JavaScript
 
+**Iterating a `Map` yields `[key, value]` pairs, not keys.** `for (const k of
+map)` gives you an array like `[5, Set]`, so `map.get(k)` is `undefined` and
+every lookup silently misses. Cleanup on disconnect therefore removed nothing
+and dead sockets accumulated in the subscriber sets. Use `map.keys()` — or
+better, iterate the small per-socket set of things it joined rather than
+scanning everything.
+
+**Order matters when removing from a collection.** Checking `size === 0`
+*before* deleting the member means the emptiness check always runs one call
+behind, so the empty container is never cleaned up. Remove first, then test.
+
+**State a client can create for free has to be bounded.** A `subscribe`
+message costs the client nothing and costs the server a map entry. Without a
+cap on how many and a check on what, one socket can grow server memory
+indefinitely. Validate the id against the same range the column allows, and
+cap the count per connection.
+
 **A bare `catch { }` binds nothing.** `catch { console.error("failed", error) }`
 raises `ReferenceError: error is not defined`, turning a handled failure into an
 unhandled one. Write `catch (error)`.
@@ -285,3 +302,55 @@ with `22003` — another 500 for what was plainly a bad request.
 
 **Evidence.** `null` now returns 400 naming the field, and the three inputs that
 previously produced 500s return 400 instead.
+
+## A 500 for a write that had already succeeded
+
+**Symptom.** `POST /matches/:id/commentary` returned 500. The row was in the
+database. Retrying the identical request returned 409 "already exists".
+
+**Investigation.** Reproduced by mounting the real router with a broadcaster
+that throws. The client was told 500, `SELECT` showed the row present, and the
+retry hit the unique `(match_id, sequence)` constraint.
+
+**Root cause.** The broadcast sat inside the same `try` as the insert. A `try`
+answers one question — did anything in here throw — and cannot say *which*
+thing. So a failure in the notification, which matters only to other viewers,
+was reported as a failure of the write the client asked for. Worse, the
+broadcast loops over subscribers, so it can throw partway: row committed, some
+subscribers notified, author told it failed.
+
+**Fix.** Respond first, then broadcast in its own `try`. Once `res.json()` has
+gone out the answer is settled and no later error can rewrite it. The
+notification failure gets logged instead of escalated.
+
+**Evidence.** Same broken broadcaster now returns 201 with the row in the body.
+The 500 also invited a retry that could only ever hit a 409 — a status code
+telling the client to retry something guaranteed to fail is worse than no
+handling at all.
+
+## Messages sent on connect vanished
+
+**Symptom.** A client that connected and immediately sent `{type:'subscribe'}`
+never got an acknowledgement, and never received commentary. Sending the same
+message a moment later worked. Intermittent, which made it look like a race in
+the test.
+
+**Investigation.** Other traffic proved the socket was healthy — a
+`matchCreated` broadcast reached it fine. So the connection was up but that
+one message was gone. Timed the Arcjet call the connection handler awaits:
+**47–226ms**. Then reproduced it in isolation with a `setTimeout` standing in
+for the check: of two messages, only the later one arrived.
+
+**Root cause.** `wss.on('connection', async ...)` awaited the Arcjet decision
+before registering `socket.on('message')`. Node drops a `message` event that
+has no listener, so everything sent during that window was discarded with no
+error on either side.
+
+**Fix.** Register the listener immediately, queue what arrives (bounded, so a
+connection about to be refused cannot buffer indefinitely), and drain it once
+the decision lands.
+
+**Evidence.** Subscribing immediately on open now returns `subscribed`, and a
+commentary POST reaches that subscriber and no one else. The general shape is
+worth remembering: **an `async` event handler leaves a window in which the
+listeners it registers do not exist yet.**

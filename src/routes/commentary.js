@@ -72,7 +72,16 @@ commentaryRouter.post('/', async (req, res) => {
       .values({ ...parsedBody.data, matchId: parsedParams.data.id })
       .returning();
 
-    return res.status(201).json({ message: 'Commentary created successfully', commentary: entry });
+    res.status(201).json({ message: 'Commentary created successfully', commentary: entry });
+
+    // Broadcast after responding, and in its own try: the row is already
+    // committed, so a notification failure must not turn a successful create
+    // into a 500 that invites the client to retry into a 409.
+    try {
+      res.app.locals.broadcastCommentaryCreated?.(entry.matchId, entry);
+    } catch (broadcastError) {
+      console.error('broadcastCommentaryCreated failed', broadcastError);
+    }
   } catch (error) {
     // Drizzle wraps driver errors in a DrizzleQueryError, so the Postgres
     // SQLSTATE lives on `cause`, not on the error itself. Falling back to

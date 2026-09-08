@@ -25,8 +25,9 @@ app.use("/matches", matchRouter);
 
 app.use("/matches/:id/commentary", commentaryRouter);
 
-const { broadcastMatchCreated } = attachWebSocketServer(server);
+const { broadcastMatchCreated, broadcastCommentaryCreated } = attachWebSocketServer(server);
 app.locals.broadcastMatchCreated = broadcastMatchCreated;
+app.locals.broadcastCommentaryCreated = broadcastCommentaryCreated;
 
 
 // Must be server.listen, not app.listen - app.listen() would create a
