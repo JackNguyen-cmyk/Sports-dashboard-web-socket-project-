@@ -151,6 +151,33 @@ run.
 browser User-Agent, since it fingerprints more than the header. Every request
 returned 403 and the API could not be exercised by hand.
 
+**A disable flag should fail safe on a typo, and the two ways to be "off" should
+be distinguishable.** Arcjet protection could only be turned off by blanking
+`ARCJET_KEY`, which looks identical in the logs to a production deploy that
+forgot to configure its key. Now `ARCJET_ENABLED=false` says off-on-purpose and
+a missing key still says misconfigured. The comparison is `=== 'false'`, not
+truthiness, so `flase` or `0` leaves protection **on** — verified by booting
+with `ARCJET_ENABLED=flase` and seeing Arcjet still initialise. A flag that
+controls a safety feature should require the exact word to disarm it.
+
+**The apminsight agent gets that backwards, and reads its own flag two different
+ways.** In `apminsight/index.js`, the import-time `AgentAPI()` at line 23
+requires `APMINSIGHT_AGENT_DISABLE.toLowerCase() == "true"`, but
+`AgentAPI.config()` at line 41 only tests `if (process.env.APMINSIGHT_AGENT_DISABLE)`.
+`"false"` is a truthy string, so `APMINSIGHT_AGENT_DISABLE=false` skips
+`config()` while still running the import-time init — a half-started agent, and
+the opposite of what the name says. Set it to `true` or leave it unset, never
+`false`. Evidence that both paths run: with the flag correctly set to `true`,
+`[APM] Apminsight agent is disabled.` prints **twice** on boot, once per code
+path.
+
+**`DRY_RUN` removes the enforcement, not the cost.** Arcjet's `DRY_RUN` still
+makes the network call — it evaluates rules and logs what it would have done.
+So it is the wrong tool for getting a rate limiter out of the way during a load
+test (the 47–226ms round trip stays, and it still bills), and the right tool for
+measuring what that layer costs you. "Disabled" and "not enforcing" are
+different states.
+
 ## Design lessons
 
 **A cross-file invariant is invisible at the call site.** `getMatchStatus` could
