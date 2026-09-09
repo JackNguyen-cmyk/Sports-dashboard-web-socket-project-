@@ -19,9 +19,15 @@ Zod validation, same insert, same broadcast, same fan-out. See
 
 ---
 
-## Stage 0 — Make it safe to run at all
+## Stage 0 — Make it safe to run at all — DONE
 
-**Blocks everything else, including any bigger load test and any deployment.**
+*Fixed 2026-09-09. Five regression tests in `ws/server.test.js` fail 5/5 against
+the pre-fix ordering and pass 5/5 with it. `stats()` on the return of
+`attachWebSocketServer` came out of this (a leaked subscription is invisible from
+outside, since a CLOSED socket is already gone from `wss.clients`) and is the
+groundwork for Stage 3.*
+
+**Blocked everything else, including any bigger load test and any deployment.**
 Two of these are remotely triggerable crashes; a 5,000-connection test is exactly
 the workload that finds them.
 
@@ -51,8 +57,10 @@ the workload that finds them.
   run logged 4 × `read ETIMEDOUT` against Neon. Those were caught because they hit
   mid-query; the same failure on an idle connection takes the process down.
 
-**Done when:** a regression test covers the oversized-frame case and the
-subscribe-then-disconnect case, and `npm test` passes.
+**Done:** `npm test` is 23 passing (18 + 5 new). Hoisting `'close'` turned out to
+be necessary but not sufficient for the leak — the close has already fired by the
+time the queue drains, so the drain also needed
+`if (socket.readyState !== WebSocket.OPEN) return;`.
 
 ---
 

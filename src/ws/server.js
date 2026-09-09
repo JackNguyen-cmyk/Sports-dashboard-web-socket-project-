@@ -106,14 +106,41 @@ function handleMessage(socket, data) {
 // written to nothing and clients.size overreports. The fix is to ask.
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS } = {}) {
+export function attachWebSocketServer(server, {
+    heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
+    // Injected rather than read straight from the import so a test can supply
+    // a check with a real delay. Every bug the ordering below guards against
+    // exists only while that await is in flight, and wsArcjet is null without
+    // a key - so with the module-level value they cannot be reproduced at all.
+    arcjet = wsArcjet,
+} = {}) {
     const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 1024 });
 
     wss.on('connection', async (socket, req) => {
-        // The Arcjet check below is a network call (measured 47-226ms). Node
-        // drops a 'message' event with no listener, so registering the handler
-        // after that await would silently discard anything a client sends on
-        // connect - and subscribing immediately is the obvious thing to do.
+        // The Arcjet check below is a network call (measured 47-226ms). NOTHING
+        // that has to survive that await may be registered after it.
+        //
+        // 'error' above all: ws emits it on the socket for any protocol
+        // violation - a frame over maxPayload, invalid UTF-8, a reserved bit -
+        // and an 'error' event with no listener is an uncaught exception that
+        // takes the whole process down. Registering it after the await left a
+        // window in which any client, unauthenticated, could kill the server
+        // with a single oversized frame.
+        //
+        // 'close' for the same reason: it fires exactly once, so a socket that
+        // goes away mid-check would have had its only close event land on no
+        // listener, and its subscriptions would never be cleaned up.
+        socket.subscriptions = new Set();
+
+        socket.on('error', (error) => {
+            console.error('WebSocket error', error);
+            socket.terminate();
+        });
+        socket.on('close', () => cleanupSubscription(socket));
+
+        // Node drops a 'message' event with no listener too, so registering
+        // this after the await would silently discard anything a client sends
+        // on connect - and subscribing immediately is the obvious thing to do.
         // Listen now, queue until the decision lands, then drain.
         const queued = [];
         let ready = false;
@@ -125,9 +152,9 @@ export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_
 
         // Checked before any heartbeat state or welcome frame, so a rejected
         // connection is never treated as a live client.
-        if (wsArcjet) {
+        if (arcjet) {
             try {
-                const decision = await wsArcjet.protect(req);
+                const decision = await arcjet.protect(req);
 
                 if (decision.isDenied()) {
                     // 1013 Try Again Later vs 1008 Policy Violation: standard
@@ -149,7 +176,12 @@ export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_
             }
         }
 
-        socket.subscriptions = new Set();
+        // The client may have gone while the check was in flight. Its 'close'
+        // has already fired, so cleanupSubscription has already run - draining
+        // the queue now would add a CLOSED socket to matchSubscribers with
+        // nothing left to ever remove it. Registering the close handler early
+        // is necessary but not sufficient; the ordering has to be checked too.
+        if (socket.readyState !== WebSocket.OPEN) return;
 
         // Assume alive on connect; each pong re-arms it for the next sweep.
         socket.isAlive = true;
@@ -162,12 +194,6 @@ export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_
         ready = true;
         for (const data of queued) handleMessage(socket, data);
         queued.length = 0;
-
-        socket.on('error', (error) => {
-            socket.terminate();
-            console.error('WebSocket error', error);
-        });
-        socket.on('close', () => cleanupSubscription(socket));
     });
 
     // Two-phase sweep: a socket that failed to pong since the last tick has
@@ -196,8 +222,21 @@ export function attachWebSocketServer(server, { heartbeatIntervalMs = HEARTBEAT_
         broadcastToMatchSubscribers(matchId, { type: 'commentaryCreated', data: commentary });
     }
 
+    // A read-only view of what the server is actually holding. Peak concurrency
+    // was previously derived - OS socket counts minus the load generator's
+    // keep-alive pool - and a leaked subscription is invisible from outside
+    // otherwise, because a CLOSED socket is already gone from wss.clients.
+    function stats() {
+        const subscribersByMatch = {};
+        for (const [matchId, sockets] of matchSubscribers) {
+            subscribersByMatch[matchId] = sockets.size;
+        }
+        return { clients: wss.clients.size, subscribersByMatch };
+    }
+
     return {
         broadcastMatchCreated,
-        broadcastCommentaryCreated
+        broadcastCommentaryCreated,
+        stats
     };
 }

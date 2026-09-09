@@ -61,6 +61,33 @@ closing handshake.
 Arcjet logs "DetectBot requires `user-agent` header to be set" because the `ws`
 client sends none. Browsers do send one, so the rule works in production.
 
+**Everything that must survive an `await` has to be registered before it.** The
+connection handler in `ws/server.js` is `async` and awaits a network call to
+Arcjet (47-226ms). `socket.on('message')` was correctly hoisted above that await
+- there was even a comment explaining why - but `'error'` and `'close'` were left
+below it, and those are the two that actually bite. A WebSocket that emits
+`'error'` with no listener is an uncaught exception, so for the length of that
+window any client could kill the server with one oversized frame. `'close'` fires
+exactly once, so a socket that went away mid-check had its only close event land
+on nothing. When one listener is hoisted for a reason, that reason almost always
+applies to its siblings.
+
+**A missing `'error'` listener is a crash, not a missed log line.** Node's
+EventEmitter treats `'error'` specially: emitting it with no listener throws. Any
+long-lived object worth attaching handlers to - a socket, a pg Pool - needs an
+`'error'` listener for that reason alone, even when there is nothing useful to do
+in it. `db/db.js` had no `pool.on('error')`, and pg emits that on the pool when an
+*idle* client dies. A routine Neon connection drop would have taken the process
+with it.
+
+**A bug that only exists inside an `await` may be invisible to your tests.**
+Without an `ARCJET_KEY` the check is skipped entirely, so the async handler runs
+start to finish synchronously and the window does not exist - none of the three
+bugs above could be reproduced by the test suite as configured. Making the
+dependency injectable (`attachWebSocketServer(server, { arcjet })`) was what made
+them testable, and it is better design anyway: the hidden module-level import
+became an explicit parameter.
+
 ## Databases and null
 
 **`new Date(null)` is the Unix epoch, not an invalid date.** So a
@@ -462,3 +489,52 @@ duration needs a non-zero floor, not a zero one:
 14,963 iterations before, **40** after — 36 publishes plus 5 held sockets, which
 is exactly right. `ws_connected` also dropped from 7 to 5, matching the VU count
 one-for-one.
+
+## One oversized frame could kill the server, and only in production
+
+**Symptom.** None, which is the point. Nothing had crashed. This came out of
+reading `ws/server.js` rather than debugging a failure, and the reasoning is the
+part worth keeping.
+
+**Investigation.** The connection handler carries a comment explaining that
+`socket.on('message')` is registered *before* the awaited Arcjet check, because
+Node drops a `'message'` event that has no listener. That is correct. But
+`'error'` and `'close'` were registered after it. If the reason applies to
+`'message'`, why not to the others?
+
+Reading `ws` settled it. `node_modules/ws/lib/websocket.js:1216` (`receiverOnError`)
+calls `websocket.emit('error', err)` for any protocol violation - a frame over
+`maxPayload`, invalid UTF-8, a bad reserved bit. Node throws on an `'error'`
+event with no listener. So for the 47-226ms of the Arcjet round trip, any client
+could crash the process with one frame, unauthenticated.
+
+A near miss worth recording: the first guess was that the *heartbeat* would crash
+on a closing socket, because it calls `socket.ping()` on everything in
+`wss.clients` without checking `readyState`. Reading the source ruled it out -
+`ping()` with no callback routes to `sendAfterClose`, which only constructs an
+error `if (cb)`. Silent no-op. The suspicion was wrong; checking it cost two
+minutes and stopped a wrong claim.
+
+**Root cause.** Handler registration ordering around an `await`. One cause, two
+bugs: the crash, and a subscription leak where a socket that disconnected
+mid-check had its only `'close'` event land on no listener, then got added to
+`matchSubscribers` when the queue drained - a CLOSED socket nothing would ever
+remove.
+
+**Why it was production-only.** With `wsArcjet` null (no key) there is no await
+at all, so the handler runs synchronously and the window does not exist. It could
+only ever fire with Arcjet enabled - which is the deployed configuration, and the
+one least likely to be exercised locally.
+
+**Fix.** Hoist `'error'` and `'close'` above the await, alongside `'message'`.
+Hoisting `'close'` is necessary but *not sufficient* for the leak: the close has
+already fired by the time the queue drains, so the drain also needs
+`if (socket.readyState !== WebSocket.OPEN) return;`. Add `pool.on('error')` in
+`db/db.js` for the same class of bug one layer down.
+
+**Evidence.** Both were reproduced standalone before fixing - the crash as
+`UNCAUGHT EXCEPTION -> Max payload size exceeded`, the leak as `retained: 1,
+readyState: 3` with zero live clients. The five regression tests in
+`ws/server.test.js` now fail 5/5 against the pre-fix ordering and pass 5/5 with
+it, which is the check that matters: a regression test that passes both ways
+tests nothing.
