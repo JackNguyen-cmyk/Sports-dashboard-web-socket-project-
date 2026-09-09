@@ -175,13 +175,27 @@ const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };
  * and excluded from the per-plateau rows, because the connection count is
  * still moving and the sample cannot be attributed to a level.
  */
-function currentPhase() {
-  const ms = exec.instance.currentTestRunDuration;
+function phaseAt(ms) {
   for (const phase of phases) {
     if (ms >= phase.startMs && ms < phase.endMs) return phase.name;
   }
   return 'ramp';
 }
+
+function currentPhase() {
+  return phaseAt(exec.instance.currentTestRunDuration);
+}
+
+/**
+ * Wall-clock instant the test started, so a subscriber can work out which
+ * plateau a message was PUBLISHED in from its postedAt stamp.
+ *
+ * Tagging a latency sample by when it arrived attributes a slow message to the
+ * plateau it landed in rather than the one that produced it. That is how the
+ * first Arcjet run ended up crediting only 195 of 600 publishes to its last
+ * plateau. Publisher and subscriber now agree: both tag by send time.
+ */
+const testStartWallMs = () => Date.now() - exec.instance.currentTestRunDuration;
 
 // ----------------------------------------------------------------- setup ---
 
@@ -282,7 +296,9 @@ export function subscriber(data) {
         const postedAt =
           message.data && message.data.metadata && message.data.metadata.postedAt;
         if (typeof postedAt === 'number') {
-          e2eLatency.add(Date.now() - postedAt, { phase: currentPhase() });
+          e2eLatency.add(Date.now() - postedAt, {
+            phase: phaseAt(postedAt - testStartWallMs()),
+          });
         } else {
           // Would mean the metadata round trip broke - the latency number
           // depends entirely on it, so count rather than silently skip.
@@ -331,6 +347,10 @@ export function publisher(data) {
   // interval is POST -> WS receive and not "some time earlier -> WS receive".
   const postedAt = Date.now();
 
+  // Captured before the request, not after it. A request that starts inside a
+  // plateau and returns after it belongs to the plateau that produced it.
+  const phase = phaseAt(exec.instance.currentTestRunDuration);
+
   const res = http.post(
     `${BASE_URL}/matches/${matchId}/commentary`,
     JSON.stringify({
@@ -349,7 +369,7 @@ export function publisher(data) {
 
   if (ok) {
     publishOk.add(1);
-    postDuration.add(res.timings.duration, { phase: currentPhase() });
+    postDuration.add(res.timings.duration, { phase });
     return;
   }
 

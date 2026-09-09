@@ -22,7 +22,6 @@ Two numbers here are derived rather than measured, and both are cross-checked:
 import csv
 import json
 import pathlib
-import re
 import sys
 
 
@@ -91,6 +90,15 @@ def main():
 
     plateaus = [p.strip() for p in ctx.get("plateaus", "").split(",") if p.strip()]
 
+    # Subscribers are round-robined across matches and so is the commentary, so
+    # a publish reaches roughly plateau/match_count sockets, not all of them.
+    # Assuming one match here (as this did originally) understates the divisor
+    # and reports a large false shortfall.
+    try:
+        match_count = max(1, int(ctx.get("match_count", "1")))
+    except ValueError:
+        match_count = 1
+
     # ------------------------------------------------------------ samples ---
     samples = []
     samples_path = d / "samples.csv"
@@ -127,10 +135,13 @@ def main():
         cpu_points[-1][1] - cpu_points[0][1] if len(cpu_points) >= 2 else None
     )
 
+    # NOT the `vus` gauge: that spans both scenarios, so it counts publisher VUs
+    # as WebSocket connections and overstates by a handful (501 vs 500 in the
+    # first recorded run). Each subscriber VU opens exactly one socket and holds
+    # it for the rest of the test, so sessions opened == peak concurrent.
+    ws_sessions = get(metrics, "ws_sessions", "count") or 0
     peak_vus = get(metrics, "vus", "max") or 0
-    # vus counts both scenarios. The publisher's VUs are short-lived and few;
-    # subscribers dominate. Reported as-is with that caveat rather than guessed.
-    keepalive_delta = peak_conns - peak_vus
+    keepalive_delta = peak_conns - ws_sessions
 
     # ----------------------------------------------------------- latency ----
     rows = []
@@ -139,7 +150,11 @@ def main():
         post = f"post_duration{{phase:{name}}}"
         published = get(metrics, post, "count") or 0
         delivered = get(metrics, e2e, "count") or 0
-        expected = published * int(name) if name.isdigit() else 0
+        # Integer division would drift on plateaus that do not divide evenly by
+        # match_count, so keep it fractional and round once at the end.
+        expected = (
+            round(published * int(name) / match_count) if name.isdigit() else 0
+        )
         loss = (1 - delivered / expected) * 100 if expected else None
         rows.append(
             {
@@ -210,12 +225,13 @@ def main():
 
     A("## Headline")
     A("")
-    A(f"- **Peak concurrent WebSocket connections held: {peak_vus}**")
+    A(f"- **Peak concurrent WebSocket connections held: {ws_sessions}**")
     A(f"- **Peak established server sockets (OS-measured): {peak_conns}**")
     A(
         f"  - difference of {keepalive_delta} is the publisher's HTTP keep-alive pool; "
         "a difference far larger than that pool would mean sockets were being dropped"
     )
+    A(f"  - (k6's `vus` gauge peaked at {peak_vus}, but that spans both scenarios)")
     A(f"- **Publish error rate: {error_rate:.2f}%** ({publish_fail} of {publish_total} POSTs failed)")
     A(f"- Peak RSS: {peak_rss} MB")
     if peak_cpu_pct is not None:
@@ -248,8 +264,8 @@ def main():
     A("## Delivery")
     A("")
     A(
-        "With every subscriber watching one match, each publish should reach every "
-        "connection. Counts are taken inside the steady plateaus only; a message "
+        "Each publish should reach every subscriber watching that match. "
+        "Counts are taken inside the steady plateaus only; a message "
         "published just before a boundary can be delivered just after it, so single-"
         "digit percentages here are edge effects rather than loss."
     )
@@ -262,6 +278,11 @@ def main():
             f"| {r['plateau']} | {r['published']} | {r['expected']} | "
             f"{r['delivered']} | {loss} |"
         )
+    A("")
+    A(
+        f"Subscribers and commentary are both spread across {match_count} match(es), "
+        f"so expected deliveries is publishes x plateau / {match_count}."
+    )
     A("")
 
     A("## Totals and anomalies")

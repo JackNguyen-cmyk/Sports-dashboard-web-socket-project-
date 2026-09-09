@@ -27,9 +27,10 @@
 
 ## Headline
 
-- **Peak concurrent WebSocket connections held: 524**
+- **Peak concurrent WebSocket connections held: 500**
 - **Peak established server sockets (OS-measured): 526**
-  - difference of 2 is the publisher's HTTP keep-alive pool; a difference far larger than that pool would mean sockets were being dropped
+  - difference of 26 is the publisher's HTTP keep-alive pool; a difference far larger than that pool would mean sockets were being dropped
+  - (k6's `vus` gauge peaked at 524, but that spans both scenarios)
 - **Publish error rate: 0.14%** (4 of 2794 POSTs failed)
 - Peak RSS: 348 MB
 - Peak CPU: 54% of one core (116.6s CPU total)
@@ -46,13 +47,15 @@
 
 ## Delivery
 
-With every subscriber watching one match, each publish should reach every connection. Counts are taken inside the steady plateaus only; a message published just before a boundary can be delivered just after it, so single-digit percentages here are edge effects rather than loss.
+Each publish should reach every subscriber watching that match. Counts are taken inside the steady plateaus only; a message published just before a boundary can be delivered just after it, so single-digit percentages here are edge effects rather than loss.
 
 | Connections | Published | Expected deliveries | Delivered | Shortfall |
 |---|---|---|---|---|
 | 50 | 599 | 29950 | 29944 | 0.0% |
 | 200 | 600 | 120000 | 119988 | 0.0% |
 | 500 | 195 | 97500 | 97475 | 0.0% |
+
+Subscribers and commentary are both spread across 1 match(es), so expected deliveries is publishes x plateau / 1.
 
 ## Totals and anomalies
 
