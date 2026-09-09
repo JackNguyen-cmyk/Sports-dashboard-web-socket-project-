@@ -120,6 +120,15 @@ load-test runs; see `load-tests/README.md`.
 
 ## Backlog
 
+Forward-looking work — scaling, deployment, webhooks, real data ingestion — lives
+in `ROADMAP.md`. What follows is the short list of known defects in the code as it
+stands.
+
+**Two of these now crash the process and are proven, not suspected** (`ROADMAP.md`
+Stage 0): `socket.on('error')` and `socket.on('close')` are registered after the
+awaited Arcjet check in `ws/server.js`, and `db/db.js` has no `pool.on('error')`.
+Fix those before anything else.
+
 Ranked. The four items introduced by the `securityMiddleware()` refactor are
 resolved (verified 2026-09-08): the inline middleware is gone, `securityMiddleware()`
 is registered before `GET /`, the bare `catch{` now binds `error`, and with only
