@@ -6,15 +6,35 @@ import arcjet, { detectBot, shield, slidingWindow } from '@arcjet/node';
 const arcjetKey = process.env.ARCJET_KEY;
 
 // LIVE enforces rules; DRY_RUN evaluates and logs them but never blocks -
-// the safe way to watch what a rule *would* do before enforcing it.
+// the safe way to watch what a rule *would* do before enforcing it. Note that
+// DRY_RUN still makes the network call to Arcjet, so it removes the
+// enforcement but not the latency or the billing. That makes it the right
+// setting for measuring what this layer costs, and the wrong one for getting
+// it out of the way.
 const arcjetMode = process.env.ARCJET_MODE === 'DRY_RUN' ? 'DRY_RUN' : 'LIVE';
 
 const isDevelopment = process.env.ARCJET_ENV === 'development';
 
+// Turning protection off on purpose and forgetting to configure a key produce
+// the same runtime behaviour - no protection - but they are very different
+// mistakes. A load test needs the first; a production deploy missing its key
+// is the second, and should be loud. Keeping them as separate signals means
+// the startup log says which one actually happened.
+//
+// Only the exact string 'false' disables. A typo ('flase', 'False ', '0')
+// leaves protection ON, so a mistyped flag fails safe. Compare the apminsight
+// agent, which gets this backwards: it disables on any truthy value, so
+// APMINSIGHT_AGENT_DISABLE=false switches the agent OFF.
+const arcjetDisabledByFlag = process.env.ARCJET_ENABLED === 'false';
+
 // No key means protection is simply off, rather than the process refusing to
 // boot. Tests and local runs start the app without one; the middleware and
 // upgrade handler both null-check before calling protect().
-if (!arcjetKey) {
+const arcjetEnabled = !arcjetDisabledByFlag && Boolean(arcjetKey);
+
+if (arcjetDisabledByFlag) {
+  console.warn('ARCJET_ENABLED=false - Arcjet protection is OFF by request.');
+} else if (!arcjetKey) {
   console.warn('ARCJET_KEY is not set - Arcjet protection is disabled.');
 }
 
@@ -26,7 +46,7 @@ const allowedBots = isDevelopment
   ? ['CATEGORY:SEARCH_ENGINE', 'CATEGORY:PREVIEW', 'CURL', 'POSTMAN']
   : ['CATEGORY:SEARCH_ENGINE', 'CATEGORY:PREVIEW'];
 
-export const httpArcjet = arcjetKey
+export const httpArcjet = arcjetEnabled
   ? arcjet({
       key: arcjetKey,
       rules: [
@@ -37,7 +57,7 @@ export const httpArcjet = arcjetKey
     })
   : null;
 
-export const wsArcjet = arcjetKey
+export const wsArcjet = arcjetEnabled
   ? arcjet({
       key: arcjetKey,
       rules: [

@@ -1,0 +1,21 @@
+mode:            baseline
+label:           mixed-load
+timestamp_utc:   20260909T180219Z
+git_sha:         a253c8e
+git_dirty:       yes
+node:            v24.14.0
+k6:              k6 v2.1.0 (commit/devel, go1.26.4, darwin/arm64)
+uname:           Darwin 25.6.0 arm64
+cpus:            10
+mem_gb:          24
+ulimit_n:        1048576
+arcjet_enabled:  false
+arcjet_mode:     LIVE
+apm_disabled:    true
+port:            8000
+base_url:        http://localhost:8000
+match_count:     5
+publish_rate:    20/s
+plateaus:        100,500
+ramp_s:          30
+hold_s:          90
