@@ -10,6 +10,10 @@ node_modules/
 *.log
 npm-debug.log*
 
+# Editors / IDEs
+.idea/
+.vscode/
+
 # OS
 .DS_Store
 Thumbs.db

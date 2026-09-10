@@ -5,6 +5,7 @@ import { db } from '../db/db.js';
 import { commentary } from '../db/schema.js';
 import { createCommentarySchema, listCommentaryQuerySchema } from '../validation/commentary.js';
 import { matchIdParamSchema } from '../validation/matches.js';
+import { zodDetails } from '../validation/errors.js';
 
 // mergeParams lets this router see :id from the path it is mounted under
 // (/matches/:id/commentary). Without it req.params is empty here, because a
@@ -16,9 +17,6 @@ const MAX_LIMIT = 100;
 
 // Shared by both handlers: the path segment is the only source of the match id.
 const parseMatchId = (req) => matchIdParamSchema.safeParse(req.params);
-
-const zodDetails = (error) =>
-  error.issues.map((i) => ({ field: i.path.join('.'), message: i.message }));
 
 commentaryRouter.get('/', async (req, res) => {
   const parsedParams = parseMatchId(req);

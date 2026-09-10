@@ -64,23 +64,32 @@ time the queue drains, so the drain also needed
 
 ---
 
-## Stage 1 — Cheap cleanup
+## Stage 1 — Cheap cleanup — MOSTLY DONE
 
-Small, unrelated, all quick.
+*2026-09-09.*
 
-- **1.1** `routes/matches.js` leaks database internals at lines 15, 24, 31, 67
-  (`JSON.stringify(error.message)` / `JSON.stringify(parsed.error)`).
-  `routes/commentary.js` already does this correctly with its `zodDetails` helper —
-  copy the pattern across.
-- **1.2** Rotate the Arcjet key (it was printed in a terminal transcript).
-- **1.3** `DELETE FROM matches WHERE sport = 'loadtest';` — clears ~10,600 rows from
-  the three baseline runs; `commentary.match_id` cascades.
-- **1.4** Add `.idea/` to the root `.gitignore`.
-- **1.5** Delete the stray root `package.json` / `node_modules` / `package-lock.json`.
-  Nothing imports them; they are the "ran npm install from the wrong directory"
-  artefact CLAUDE.md warns about.
+- **1.1 done.** `routes/matches.js` no longer leaks database internals. All four
+  sites fixed: the two 400s now return `zodDetails(...)`, and the two 500s log
+  server-side and return a generic message. The helper was extracted to
+  `validation/errors.js` and both routers import it, so the two cannot drift into
+  reporting validation failures in different shapes. Verified against a live
+  server — a bad query now returns
+  `{"field":"limit","message":"limit must be a number"}` instead of an escaped blob.
+- **1.2 outstanding — yours.** Rotate the Arcjet key; it was printed in a terminal
+  transcript. Only doable from the Arcjet dashboard.
+- **1.3 done.** Deleted 11 `sport = 'loadtest'` matches, which cascaded to 10,701
+  commentary rows. The two real `football` matches (ids 9 and 10) and their single
+  commentary row were verified untouched beforehand and remain.
+- **1.4 done.** `.idea/` and `.vscode/` added to the root `.gitignore`.
+- **1.5 outstanding.** The stray root `package.json` / `package-lock.json` /
+  `node_modules` are untracked, so they live in the working copy rather than in a
+  commit. Nothing imports them.
 
-Toggles are already done (`ARCJET_ENABLED`, `APMINSIGHT_AGENT_DISABLE`, commit `1ea98bb`).
+Toggles were already done (`ARCJET_ENABLED`, `APMINSIGHT_AGENT_DISABLE`, commit `1ea98bb`).
+
+Still no automated route tests — the checks above were manual `curl` calls against
+a live server. That is Stage 3 of the original backlog and worth doing before this
+code changes again.
 
 ---
 
