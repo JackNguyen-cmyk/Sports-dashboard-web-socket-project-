@@ -4,41 +4,18 @@
 // on import order, so load it explicitly.
 import 'dotenv/config';
 
-// Then the agent, before express/pg/ws, since it instruments modules as they
-// are imported.
+// Then the agent, before app.js, since it instruments modules as they are
+// imported and app.js is what pulls in express, pg and ws. ESM hoists every
+// import, so this ordering is the ordering of the import statements, not of
+// the code between them.
 import AgentAPI from "apminsight";
 AgentAPI.config();
-import express from "express";
-import http from "http";
-import { matchRouter } from "./routes/matches.js";
-import { attachWebSocketServer } from "./ws/server.js";
-import { securityMiddleware } from "./ws/arcjet.js";
-import { commentaryRouter } from "./routes/commentary.js";
+import { createApp } from './app.js';
 
 const PORT = Number(process.env.PORT) || 8000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-const app = express();
-const server = http.createServer(app);
-
-app.use(express.json());
-
-// Registered before any route: Express matches in order, so a route declared
-// above this line would never reach it.
-app.use(securityMiddleware());
-
-app.get("/", (req, res) => {
-  res.json({ message: "Hello from the Express server!" });
-});
-
-app.use("/matches", matchRouter);
-
-app.use("/matches/:id/commentary", commentaryRouter);
-
-const { broadcastMatchCreated, broadcastCommentaryCreated } = attachWebSocketServer(server);
-app.locals.broadcastMatchCreated = broadcastMatchCreated;
-app.locals.broadcastCommentaryCreated = broadcastCommentaryCreated;
-
+const { server } = createApp();
 
 // Must be server.listen, not app.listen - app.listen() would create a
 // second HTTP server, leaving the one the WebSocket server is attached to
