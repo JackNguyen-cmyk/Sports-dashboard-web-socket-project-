@@ -3,7 +3,6 @@
 Three runs against the system as it exists today: one node process, one in-memory
 `matchSubscribers` Map, one Neon database. Raw output in `results/`.
 
-Published summary: <https://claude.ai/code/artifact/1fa787c4-e844-450c-ad71-5d24d71da5ea>
 
 | Run | Shape | Purpose |
 |---|---|---|

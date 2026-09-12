@@ -21,3 +21,13 @@ Thumbs.db
 # APM Insight config - contains a licenseKey, must never be committed
 apminsight.json
 apminsightnode.json
+
+# Working notes - kept locally, not part of the published project
+CLAUDE.md
+LEARNING.md
+ROADMAP.md
+
+# AI tooling state
+.claude/
+.agents/
+skills-lock.json
