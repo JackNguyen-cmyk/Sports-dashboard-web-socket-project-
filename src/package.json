@@ -1,7 +1,7 @@
 {
   "name": "websocket-project",
   "version": "1.0.0",
-  "description": "",
+  "description": "Real-time sports commentary over WebSocket: Express 5, ws, Neon Postgres via Drizzle, Zod",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
