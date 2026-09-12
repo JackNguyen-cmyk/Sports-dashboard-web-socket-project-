@@ -22,10 +22,10 @@ Thumbs.db
 apminsight.json
 apminsightnode.json
 
-# Working notes - kept locally, not part of the published project
+# Private working instructions. LEARNING.md, ROADMAP.md and SKILL.md are
+# deliberately NOT ignored - the engineering log is the part of the project
+# a reviewer reads to tell built from pasted.
 CLAUDE.md
-LEARNING.md
-ROADMAP.md
 
 # AI tooling state
 .claude/
