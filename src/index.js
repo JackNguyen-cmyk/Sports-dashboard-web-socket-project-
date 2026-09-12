@@ -11,11 +11,14 @@ import 'dotenv/config';
 import AgentAPI from "apminsight";
 AgentAPI.config();
 import { createApp } from './app.js';
+import { db } from './db/db.js';
 
 const PORT = Number(process.env.PORT) || 8000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-const { server } = createApp();
+// The one place the real database is wired in. Everything below app.js takes
+// db as a parameter, so a test can hand it a fake instead.
+const { server } = createApp({ db });
 
 // Must be server.listen, not app.listen - app.listen() would create a
 // second HTTP server, leaving the one the WebSocket server is attached to
