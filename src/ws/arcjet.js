@@ -25,6 +25,14 @@ const isDevelopment = process.env.ARCJET_ENV === 'development';
 // leaves protection ON, so a mistyped flag fails safe. Compare the apminsight
 // agent, which gets this backwards: it disables on any truthy value, so
 // APMINSIGHT_AGENT_DISABLE=false switches the agent OFF.
+//
+// This is read once, at import time, so the flag must already be in the
+// environment when Node starts. Setting process.env.ARCJET_ENABLED inside a
+// test file does nothing: ESM hoists every import above the file's own code,
+// so this line has run before that assignment does. Verified - with the flag
+// set at the top of a file that imports this module, both clients came up
+// live. That is why `npm test` sets it in the script rather than in any test,
+// and why a bare `node --test` will hit Arcjet for real.
 const arcjetDisabledByFlag = process.env.ARCJET_ENABLED === 'false';
 
 // No key means protection is simply off, rather than the process refusing to
