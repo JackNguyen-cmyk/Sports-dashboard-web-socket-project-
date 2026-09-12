@@ -19,6 +19,47 @@ Zod validation, same insert, same broadcast, same fan-out. See
 
 ---
 
+## The plan in one screen
+
+Two tracks. Each stage below is one line; the detailed sections that follow
+say how and why.
+
+**Track A — make it scale.** Produces the before/after story with numbers.
+
+| Stage | In one line | What the story is |
+|---|---|---|
+| 2 | Find out why writes got 3× slower when load only doubled — is the `pg` pool too small, or is Neon the limit? Change one variable at a time. | "I had a lead, I isolated it" |
+| 3 | Add `/stats` so connection counts are *read*, not derived from OS socket counts. | Needed to prove stage 6 |
+| 4 | Push to 2,000–5,000 connections and find where it actually breaks. At 500 the server used 11% of one core, so the ceiling is unknown. | "Here is the real ceiling and what broke first" |
+| 5 | One slow client currently slows broadcasts for everyone — pick a backpressure policy. And let a client that drops mid-match ask for everything since sequence N. | Backpressure + replay |
+| 6 | Two server instances can't see each other's subscribers because `matchSubscribers` is an in-memory `Map`. Redis pub/sub fixes that. Re-run the identical load test after. | "Horizontal scaling, and the median didn't move — which is correct" |
+
+**Track B — make it real.** Turns it into something that runs, unattended, on
+live data.
+
+| Stage | In one line | What the story is |
+|---|---|---|
+| 7 | Deploy it. Graceful shutdown first, so a redeploy stops dropping every live connection. | A URL someone can hit |
+| 8 | API keys on write endpoints — today anyone can `POST` commentary to any match. Decide multi-tenancy here, once, while it's cheap. | Auth, and a deliberate schema decision |
+| 9 | Push events out via webhooks (Discord first). Discord allows ~5 msgs / 2s and the system emits 20 events/s, so events must be **batched**, not just retried. | Rate-limited downstream, coalescing |
+| 10 | Stop typing matches in by hand — poll a real football API every 30s. Re-polling must not create duplicates: a unique index on the upstream `goalID` makes the database refuse repeats. | Idempotent ingestion |
+| 11 | Write the latency claim honestly: ~100ms event→subscriber *and* 30–60s upstream refresh are both true; don't blur them into "sub-second live scores". | Knowing which part you control |
+| 12 | Aggregate queries over real data — top scorers, match summaries. | Finally uses the relational API |
+
+**The live-data source is already chosen: [OpenLigaDB](https://api.openligadb.de).**
+Stage 10 records why the two obvious candidates failed (football-data.org has no
+events on its free tier; API-Football caps at 100 requests/day). OpenLigaDB has
+no key and no signup, returns real goal events with stable `goalID`s, and was
+re-checked live on 2026-09-12 — it served the current Bundesliga matchday with
+goals attached. Trade-offs: German football only, goals but not cards or subs,
+and it's crowdsourced so freshness is best-effort. **No code calls it yet.**
+
+**Which track first?** For a deployed thing you use: 7 → 8 → 9 → 10. For the
+interview story: 2 → 3 → 4 → 5 → 6. The cheapest high-credibility subset is
+route tests + CI (stage 1 leftover), deploy (7), then Redis (6).
+
+---
+
 ## Stage 0 — Make it safe to run at all — DONE
 
 *Fixed 2026-09-09. Five regression tests in `ws/server.test.js` fail 5/5 against
