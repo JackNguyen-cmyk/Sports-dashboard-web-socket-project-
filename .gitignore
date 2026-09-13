@@ -22,10 +22,11 @@ Thumbs.db
 apminsight.json
 apminsightnode.json
 
-# Private working instructions. LEARNING.md, ROADMAP.md and SKILL.md are
-# deliberately NOT ignored - the engineering log is the part of the project
-# a reviewer reads to tell built from pasted.
+# Private working notes. SKILL.md is the public, curated version of the
+# engineering log; LEARNING.md is the raw one and stays local. ROADMAP.md is
+# tracked.
 CLAUDE.md
+LEARNING.md
 
 # AI tooling state
 .claude/

@@ -165,8 +165,8 @@ Raw output in `load-tests/results/`.
 
 # 7. Things that broke and how I fixed them
 
-The full log — every bug, grouped by concept, plus longer debugging stories — is
-in `LEARNING.md`. These are the ones an interviewer should ask about.
+Every entry here is a bug that actually occurred, with the commit behind it.
+These are the ones an interviewer should ask about.
 
 1. **Symptom:** Nothing. Reading `ws/server.js`, `socket.on('message')` was
    registered *before* an awaited Arcjet call with a comment explaining why —
@@ -389,7 +389,8 @@ A: _<your 90-second version>_
   (`updateScoreSchema` has no endpoint) and a match created as `scheduled`
   stays `scheduled` forever — `syncMatchStatus` exists and is called by nothing
   but its own tests (stage 3). This is the gap the load-test numbers distracted
-  me from; see "Scale the product, not the demo" in `LEARNING.md`.
+  me from — interesting measurements pull attention toward optimising the path
+  that exists and away from noticing the path that does not.
 - **Single instance only.** `matchSubscribers` is per-process; a second
   instance would silently split the audience.
 - **No graceful shutdown.** A restart drops every live connection and abandons
@@ -445,7 +446,7 @@ cd load-tests && ./run-baseline.sh
 Fill this in. If the project started from a tutorial or a starter template,
 name it here and say in one line which parts diverged — the vault's position is
 that copying is fine and uncredited copying is not. Things that are entirely
-your own (the load-test harness, the regression tests, the LEARNING.md log)
+your own (the load-test harness, the regression tests, this file)
 should be listed as such so the line is clear.
 -->
 
