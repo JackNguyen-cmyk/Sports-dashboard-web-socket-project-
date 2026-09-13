@@ -131,8 +131,8 @@ time the queue drains, so the drain also needed
   reporting validation failures in different shapes. Verified against a live
   server — a bad query now returns
   `{"field":"limit","message":"limit must be a number"}` instead of an escaped blob.
-- **1.2 outstanding — yours.** Rotate the Arcjet key; it was printed in a terminal
-  transcript. Only doable from the Arcjet dashboard.
+- **1.2 outstanding.** Rotate the Arcjet key (Arcjet dashboard only). Standard
+  hygiene before the first deploy; not a code change.
 - **1.3 done.** Deleted 11 `sport = 'loadtest'` matches, which cascaded to 10,701
   commentary rows. The two real `football` matches (ids 9 and 10) and their single
   commentary row were verified untouched beforehand and remain.
